@@ -47,7 +47,7 @@ threading.Thread(target=run_api, daemon=True).start()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
 COOKIES_FILE = os.path.join(BASE_DIR, "cookies.txt")
-MEMORY_FILE = os.path.join(BASE_DIR, "memory.json") # Memory for learning
+MEMORY_FILE = os.path.join(BASE_DIR, "memory.json")
 
 if os.path.exists(DOWNLOAD_DIR):
     shutil.rmtree(DOWNLOAD_DIR)
@@ -61,7 +61,7 @@ GROUPS = {
     "DEFAULT":  -1003672925665
 }
 
-# ================= ORIGINAL KEYWORDS & LOGIC FROM speedupfb.py =================
+# ================= KEYWORDS & CLASSIFICATION =================
 
 MATHS_KEYWORDS = ["addition", "subtraction", "multiplication", "division", "number", "numbers", "ordinal", "even", "odd", "count", "counting", "chapter", "exercise", "page", "pages", "graph", "graphs", "picture graph", "number to", "numbers to"]
 SIGHT_KEYWORDS = ["sight", "sight word", "sight words", "sentences", "sentence practice", "who", "such", "long", "every"]
@@ -87,28 +87,21 @@ def normalize_text_for_ai(text):
     t = re.sub(r'\s+', ' ', t).strip()
     return t
 
-# 🔥 ORIGINAL CLASSIFICATION LOGIC 🔥
 def classify_by_keywords(title, body=""):
     text = normalize_text_for_ai(str(title) + " " + str(body))
     scores = {"MATHS": 0, "SIGHT": 0, "PHONICS": 0, "GRAMMAR": 0}
 
     for kw in MATHS_KEYWORDS:
         if kw in text: scores["MATHS"] += 1
-            
     for kw in SIGHT_KEYWORDS:
         if kw in text: scores["SIGHT"] += 1
-    if str(title).count(',') >= 2: scores["SIGHT"] += 1
-
     for kw in PHONICS_KEYWORDS:
         if len(kw) <= 2: 
              if re.search(rf'\b{kw}\b', text): scores["PHONICS"] += 1
-        elif kw in text:
-             scores["PHONICS"] += 1
-
+        elif kw in text: scores["PHONICS"] += 1
     for kw in GRAMMAR_KEYWORDS:
         if kw in text: scores["GRAMMAR"] += 1
 
-    # Priority Logic: PHONICS wins ties
     if scores["PHONICS"] > 0 and scores["PHONICS"] >= scores["MATHS"]:
         best_cat = "PHONICS"
     else:
@@ -135,22 +128,43 @@ def predict_from_memory(title):
     mem = load_json(MEMORY_FILE)
     return mem.get(sig, None)
 
-def sanitize_filename(text):
-    if not text: return "video"
-    clean = re.sub(r'[\\/*?:"<>|]', "", text)
-    clean = clean.replace("\n", " ").strip()
-    return clean[:150]
+# 🔥 CUSTOM TITLE LOGIC 🔥
+def extract_custom_title(description, fallback_title):
+    """
+    Logic:
+    1. Look at Description (Post Text).
+    2. Take the FIRST LINE only.
+    3. Remove Links.
+    4. Keep only specific symbols (Dot, Underscore, Bracket, Comma, Dash).
+    5. If Description is empty, use the Fallback Title.
+    """
+    
+    source_text = ""
+    
+    # Description ရှိရင် Description ကို ဦးစားပေးမယ်
+    if description and len(description.strip()) > 0:
+        source_text = description
+    else:
+        # Description မရှိမှ yt-dlp Title ကို သုံးမယ်
+        source_text = fallback_title
 
-# 🔥 ORIGINAL TITLE NORMALIZATION LOGIC 🔥
-def normalize_lesson_title(title):
-    if not title: return "Video Lesson"
-    title = title.replace("…", "...")
-    # Bracket removal Logic from speedupfb.py
-    m = re.search(r'^(.+?\(\s*\d+\s*\))', title)
-    if m: return sanitize_filename(m.group(1).strip())
-    # See more splitting Logic
-    title = re.split(r'See more|\.\.\.', title, flags=re.IGNORECASE)[0]
-    return sanitize_filename(title.strip())
+    if not source_text: return "Video Lesson"
+
+    # ၁။ ပထမဆုံး စာကြောင်း (First Line) ကို ဖြတ်ယူမယ်
+    first_line = source_text.strip().split('\n')[0]
+
+    # ၂။ Link တွေကို ဖယ်မယ်
+    text = re.sub(r'http\S+', '', first_line)
+
+    # ၃။ ခွင့်ပြုထားတဲ့ သင်္ကေတများ: A-Z, 0-9, Space, -, (, ), ., ,, _
+    # ကျန်တဲ့ Emoji တွေ ဖယ်မယ်
+    clean_text = re.sub(r'[^\w\s\-\(\)\.\,_]', '', text)
+
+    # ၄။ ရှေ့နောက် Space ရှင်းမယ်
+    final_title = re.sub(r'\s+', ' ', clean_text).strip()
+
+    if not final_title: return "Video Lesson"
+    return final_title[:100] # စာလုံးရေ ၁၀၀ ထိပဲ ယူမယ်
 
 # ================= 4. THUMBNAIL GENERATOR =================
 def create_text_thumbnail(text, output_path):
@@ -186,16 +200,9 @@ def create_text_thumbnail(text, output_path):
         print(f"Thumbnail Error: {e}")
         return False
 
-# ================= 5. DOWNLOADER LOGIC (yt-dlp) =================
+# ================= 5. DOWNLOADER LOGIC =================
 client = TelegramClient(MemorySession(), API_ID, API_HASH)
 queue = asyncio.Queue()
-
-def resolve_lesson_folder_flat(base_dir, category, title):
-    # Logic from speedupfb.py to create folders based on lesson names if needed
-    # Keeping it simple for Render: Downloads/Category/Title.mp4
-    path = os.path.join(base_dir, category)
-    if not os.path.exists(path): os.makedirs(path)
-    return path
 
 def download_video_sync(url, status_cb):
     timestamp = int(time.time())
@@ -232,27 +239,21 @@ def download_video_sync(url, status_cb):
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            status_cb("🔍 Extracting Info (Complex Mode)...")
+            status_cb("🔍 Extracting Info...")
             info = ydl.extract_info(url, download=False)
             
-            # 🔥 ORIGINAL LOGIC INTEGRATION 🔥
-            raw_title = info.get("title", "")
-            description = info.get("description", "")
+            # 🔥 FORCE CUSTOM TITLE LOGIC 🔥
+            raw_desc = info.get("description", "")
+            raw_title_fallback = info.get("title", "")
             
-            # Use Description as Title source if Title is generic "Facebook Video"
-            source_text_for_title = raw_title
-            if not raw_title or "Facebook" in raw_title or re.match(r'^\d{4}-\d{2}-\d{2}', str(raw_title)):
-                if description:
-                    source_text_for_title = description
+            # ခင်ဗျားလိုချင်တဲ့ Logic အတိုင်း ဖြတ်ယူမယ်
+            final_title = extract_custom_title(raw_desc, raw_title_fallback)
             
-            # Apply original normalization
-            final_title = normalize_lesson_title(source_text_for_title)
-            
-            # Apply original classification
-            ai_category = classify_by_keywords(final_title, description)
+            # Classification
+            ai_category = classify_by_keywords(final_title, raw_desc)
             
             meta["title"] = final_title
-            meta["desc"] = description
+            meta["desc"] = raw_desc
             meta["category"] = ai_category
 
             # Start Download
@@ -301,14 +302,13 @@ async def worker():
             if not files or not files["video"]:
                 raise Exception("Download Failed!")
 
-            # 🔥 CATEGORY LOGIC WITH MEMORY
+            # 🔥 MEMORY & CATEGORY LOGIC
             category = predict_from_memory(meta["title"])
             if not category:
-                category = meta.get("category") # From AI
+                category = meta.get("category")
             if not category:
                 category = "DEFAULT"
             
-            # Learn for next time
             learn_category(meta["title"], category)
 
             target_chat = GROUPS.get(category, GROUPS["DEFAULT"])
@@ -330,7 +330,7 @@ async def worker():
                 supports_streaming=True
             )
             
-            # 🔥 FIXED: BUTTON LINK
+            # 🔥 BUTTON LINK
             clean_id = str(target_chat).replace("-100", "")
             post_link = f"https://t.me/c/{clean_id}/{msg.id}"
             
@@ -342,9 +342,8 @@ async def worker():
                 [Button.inline("➡️ Move to PHONICS", f"MOVE:PHONICS:{msg.id}")]
             ]
             
-            # Reply to User
             await status_msg.edit(
-                f"✅ **Done!** Uploaded to #{category}",
+                f"✅ **Done!** Uploaded to #{category}\n📄 Title: `{meta.get('title')}`",
                 buttons=buttons
             )
 
@@ -367,8 +366,6 @@ async def callback_handler(event):
     if "MOVE" in data:
         _, cat, msg_id = data.split(":")
         await event.edit(f"✅ Learned: **{cat}**")
-        # Note: Actual moving requires admin rights and delete/resend logic which is complex
-        # For now, we just acknowledge the learning.
 
 @client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private))
 async def message_handler(event):
@@ -385,7 +382,7 @@ async def message_handler(event):
     await queue.put((event, text, status_msg))
 
 if __name__ == "__main__":
-    print("🚀 Bot Started (Render Mode + Original Complex Logic)...")
+    print("🚀 Bot Started (Forced Description Title Mode)...")
     client.start(bot_token=BOT_TOKEN)
     loop = asyncio.get_event_loop()
     loop.create_task(worker())
