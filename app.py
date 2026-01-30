@@ -23,10 +23,18 @@ except KeyError:
     exit(1)
 
 # ================= 2. FASTAPI SERVER =================
+# ================= 2. FASTAPI SERVER =================
 app = FastAPI()
 
+# Root (ပင်မလမ်းကြောင်း) အတွက်
 @app.get("/")
+@app.head("/")
+async def root():
+    return {"status": "alive"}
+
+# Health Check အတွက် (HEAD ပါ လက်ခံအောင် ပြင်ထားသည်)
 @app.get("/health")
+@app.head("/health")
 def health():
     return {"status": "alive"}
 
@@ -324,4 +332,5 @@ if __name__ == "__main__":
         client.run_until_disconnected()
     except KeyboardInterrupt:
         print("Stopped")
+
 
