@@ -9,4 +9,5 @@ RUN apt-get update && \
 WORKDIR /app
 COPY . /app
 RUN pip install --no-cache-dir -r requirements.txt
-CMD uvicorn app:app --host 0.0.0.0 --port $PORT
+CMD ["python", "app.py"]
+
