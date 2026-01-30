@@ -1,16 +1,12 @@
 # Python 3.9 Slim
 FROM python:3.9-slim
 
-# Install FFmpeg AND Aria2c (အရေးကြီးသည်)
+# Aria2c ကို ဖြုတ်လိုက်ပါပြီ (Error တက်နေလို့ပါ)
 RUN apt-get update && \
-    apt-get install -y ffmpeg aria2 && \
+    apt-get install -y ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY . /app
-
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Render Port Setup
 CMD uvicorn app:app --host 0.0.0.0 --port $PORT
-
