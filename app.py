@@ -14,9 +14,13 @@ from telethon.sessions import MemorySession
 from fastapi import FastAPI
 
 # ================= 1. API CREDENTIALS =================
-API_ID = 2693994
-API_HASH = "b151256f2d7874a77cfa533d008d6d09"
-BOT_TOKEN = "8364825649:AAGKifPlcXPYkcmVxE5neJ-9ogEj2JxGMdY"
+try:
+    API_ID = int(os.environ["API_ID"])
+    API_HASH = os.environ["API_HASH"]
+    BOT_TOKEN = os.environ["BOT_TOKEN"]
+except KeyError:
+    print("❌ Error: Render Environment Variables မှာ Key တွေ မဖြည့်ရသေးပါ!")
+    exit(1)
 
 # ================= 2. FASTAPI SERVER =================
 app = FastAPI()
@@ -320,3 +324,4 @@ if __name__ == "__main__":
         client.run_until_disconnected()
     except KeyboardInterrupt:
         print("Stopped")
+
