@@ -9,8 +9,7 @@ from telethon import TelegramClient, events
 from telethon.sessions import MemorySession
 from fastapi import FastAPI
 
-# ================= 1. API CREDENTIALS (RESTORED) =================
-# အရင်က ပေးခဲ့တဲ့ Key တွေကို ဒီမှာ တိုက်ရိုက်ထည့်ထားပါတယ်
+# ================= 1. API CREDENTIALS =================
 API_ID = 2693994
 API_HASH = "b151256f2d7874a77cfa533d008d6d09"
 BOT_TOKEN = "8364825649:AAGKifPlcXPYkcmVxE5neJ-9ogEj2JxGMdY"
@@ -25,11 +24,9 @@ def health():
 
 def run_api():
     import uvicorn
-    # Render က ပေးတဲ့ PORT (မရှိရင် 10000)
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
 
-# API ကို Thread တစ်ခုနဲ့ ခွဲ run မယ် (Bot ကို မနှောင့်ယှက်အောင်)
 threading.Thread(target=run_api, daemon=True).start()
 
 # ================= 3. CONFIG & DIRECTORIES =================
@@ -37,7 +34,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
 COOKIES_FILE = os.path.join(BASE_DIR, "cookies.txt")
 
-# Folder ရှင်းလင်းခြင်း
 if os.path.exists(DOWNLOAD_DIR):
     shutil.rmtree(DOWNLOAD_DIR)
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -67,10 +63,7 @@ def classify(title, desc=""):
 client = TelegramClient(MemorySession(), API_ID, API_HASH)
 queue = asyncio.Queue()
 
-# 🔥 FIXED: Worker Ready Flag မလိုတော့ပါ
-# Bot စတာနဲ့ Worker ကို Main Loop မှာပဲ တခါတည်း စမှာမို့ Double Start မဖြစ်တော့ပါ
-
-# ================= 5. DOWNLOADER LOGIC =================
+# ================= 5. DOWNLOADER LOGIC (NO ARIA2C) =================
 def download_video_sync(url, status_cb):
     uid = f"{int(time.time())}_{random.randint(1000,9999)}"
     outtmpl = os.path.join(DOWNLOAD_DIR, f"{uid}.%(ext)s")
@@ -80,7 +73,6 @@ def download_video_sync(url, status_cb):
         if d["status"] == "downloading":
             try:
                 p = d.get('_percent_str', '0%')
-                # Message တွေ အရမ်းများမသွားအောင် 10% ပြည့်တိုင်းမှ update မယ် (Optional)
                 status_cb(f"⬇️ Downloading: {p}")
             except: pass
         elif d["status"] == "finished":
@@ -92,9 +84,7 @@ def download_video_sync(url, status_cb):
         "outtmpl": outtmpl,
         "quiet": True,
         "progress_hooks": [hook],
-        # Dockerfile မှာ aria2c ပါမှ ဒါအလုပ်လုပ်မယ်
-        "external_downloader": "aria2c",
-        "external_downloader_args": ["-x","8","-s","8","-k","1M"],
+        # Aria2c ကို ဖြုတ်လိုက်ပါပြီ (Stable ဖြစ်စေရန်)
         "nocheckcertificate": True,
     }
 
@@ -123,7 +113,6 @@ async def worker():
     loop = asyncio.get_event_loop()
 
     while True:
-        # Queue ထဲက အလုပ်လာမယ့်အချိန်ကို စောင့်မယ်
         event, url, status_msg = await queue.get()
         path = None 
 
@@ -133,9 +122,7 @@ async def worker():
             )
 
         try:
-            update_status("⏳ Starting Download (Render Server)...")
-            
-            # Download ကို သီးသန့် Thread နဲ့ Run မယ် (Bot မလေးအောင်)
+            update_status("⏳ Starting Download...")
             path, meta = await loop.run_in_executor(
                 None, download_video_sync, url, update_status
             )
@@ -143,7 +130,6 @@ async def worker():
             if not path or not os.path.exists(path):
                 raise Exception("Download Failed! (Check logs)")
 
-            # Classify & Upload
             category = classify(meta.get("title", ""), meta.get("desc", ""))
             target_chat = GROUPS.get(category, GROUPS["DEFAULT"])
             
@@ -170,8 +156,6 @@ async def worker():
 # ================= 6. EVENT HANDLER =================
 @client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private))
 async def message_handler(event):
-    
-    # Cookie File Update
     if event.file and event.file.name == "cookies.txt":
         await client.download_media(event.message, COOKIES_FILE)
         await event.reply("✅ **Cookies Updated Successfully!**")
@@ -181,11 +165,7 @@ async def message_handler(event):
     if not text.startswith(("http", "www")):
         return
 
-    # User ကို တုံ့ပြန်
     status_msg = await event.reply("🔄 Added to queue...")
-    
-    # 🔥 FIXED: Worker ကို ဒီကနေ လှမ်းမခေါ်တော့ဘူး (Double Start မဖြစ်အောင်)
-    # Queue ထဲကိုပဲ ထည့်လိုက်မယ်
     await queue.put((event, text, status_msg))
 
 # ================= 7. MAIN EXECUTION =================
@@ -193,7 +173,6 @@ if __name__ == "__main__":
     print("🚀 Starting Bot on Render...")
     client.start(bot_token=BOT_TOKEN)
     
-    # Worker ကို ဒီနေရာမှာ တစ်ခါတည်း စမယ် (Singleton Worker)
     loop = asyncio.get_event_loop()
     loop.create_task(worker())
     
