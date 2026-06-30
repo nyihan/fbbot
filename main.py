@@ -224,9 +224,34 @@ def download_video_sync(url, status_cb):
         "nocheckcertificate": True,
         "writethumbnail": False,
         "restrictfilenames": True,
-        "source_address": "0.0.0.0",  # IPv6 ကြောင့် Error မတက်စေရန် IPv4 ကိုသာ အတင်းသုံးခိုင်းခြင်း
-        "sleep_requests": 2,          # Facebook က Block မလုပ်စေရန် Request တစ်ခုနှင့်တစ်ခုကြား ၂ စက္ကန့် နားခြင်း
-        "retries": 5,
+        
+        # ==========================================
+        # 🛡️ 1. Anti-Ban / Stealth (လူအစစ် ဟန်ဆောင်ခြင်း)
+        # ==========================================
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "same-origin",
+        },
+        "sleep_requests": 3,          # Request တစ်ခုနဲ့တစ်ခုကြား ၃ စက္ကန့်နားမည်
+        "sleep_interval": 5,          # Download မစခင် ၅ စက္ကန့်နားမည်
+        "max_sleep_interval": 10,     # အများဆုံး ၁၀ စက္ကန့်အထိ ကျပန်း (Random) နားမည်
+        
+        # ==========================================
+        # ⚡ 2. Aria2c Integration (အမြန်နှုန်းမြှင့်တင်ခြင်း)
+        # ==========================================
+        #"external_downloader": "aria2c",
+        #"external_downloader_args": [
+         #   "-c",             # Connection ပြတ်သွားပါက ဆက်ဒေါင်းမည် (Resume)
+         #   "-j", "16",       # တစ်ပြိုင်နက်တည်း အပိုင်း (၁၆) ပိုင်းခွဲဒေါင်းမည်
+          #  "-x", "16",       # Server တစ်ခုတည်းသို့ Connection (၁၆) ခု ချိတ်မည်
+          #  "-s", "16",       # ဖိုင်ကို အပိုင်း (၁၆) ပိုင်း ပိုင်းမည်
+          #  "-k", "1M"        # အနည်းဆုံး 1MB စီခွဲမည်
+           # "--async-dns=false",
+            #"--disable-ipv6=true"
+       # ],
     }
 
     if os.path.exists(COOKIES_FILE):
